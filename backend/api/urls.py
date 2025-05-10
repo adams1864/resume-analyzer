@@ -1,7 +1,8 @@
 from django.urls import path
-from .views import login, upload_resume
+from . import views
 
 urlpatterns = [
-    path('auth/login', login),
-    path('upload', upload_resume),
+    path('auth/login', views.login),
+    path('upload', views.upload_resume),
+    path('extract_pdf/', views.extract_pdf, name='extract_pdf'),
 ]

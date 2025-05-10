@@ -5,24 +5,46 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from django.core.files.storage import default_storage
 import requests
+from django.contrib.auth import authenticate
+from pdfminer.high_level import extract_text
 
 @api_view(['POST'])
 def login(request):
     username = request.data.get('username')
     password = request.data.get('password')
-    if username == 'testuser' and password == 'testpass':
-        token = RefreshToken.for_user(request.user)  # fake, so use dummy token
-        return Response({'access': str(token.access_token)})
+    user = authenticate(username=username, password=password)
+    if user:
+        refresh = RefreshToken.for_user(user)
+        return Response({'access': str(refresh.access_token)})
     return Response({'error': 'Invalid credentials'}, status=400)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def upload_resume(request):
-    file = request.FILES['file']
+    try:
+        file = request.FILES['file']
+    except KeyError:
+        return Response({'error': 'No file uploaded'}, status=400)
+
+    # Optionally save the file locally
     path = default_storage.save(file.name, file)
-    # Call n8n webhook
-    requests.post(
-        'https://your-n8n-domain.com/webhook-url',
-        json={'filename': file.name, 'filepath': path}
-    )
-    return Response({'message': 'Uploaded and sent to n8n'})
+
+    # Send file to n8n webhook as multipart/form-data
+    n8n_url = 'http://localhost:5678/webhook-test/resume'
+    files = {'data': (file.name, file.file, file.content_type)}
+    response = requests.post(n8n_url, files=files)
+
+    return Response({'message': 'Uploaded successfully', 'n8n_response': response.text})
+
+@api_view(['POST'])
+def extract_pdf(request):
+    try:
+        file = request.FILES['file']
+    except KeyError:
+        return Response({'error': 'No file uploaded'}, status=400)
+
+    try:
+        text = extract_text(file.file)  # Pass file.file to extract_text
+        return Response({'text': text})
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
